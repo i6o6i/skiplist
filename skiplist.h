@@ -37,6 +37,7 @@ class skip_list
 		typedef typename std::allocator_traits<allocator_type>::rebind_alloc<value_type> _Pair_alloc_type;
 		
 		typedef _Skip_list_iterator<value_type> iterator;
+		typedef _Skip_list_const_iterator<value_type> const_iterator;
 
 		typedef _skip_list<_Key, value_type, _select1st<value_type>, value_compare, _Pair_alloc_type> skip_list_type;
 	protected:
@@ -54,4 +55,15 @@ class skip_list
 		end() noexcept
 		{ return _M_t.end(); }
 
+		iterator
+		erase(const_iterator iter)
+		{
+			return _M_t.erase(iter);
+		}
+
+		iterator
+		erase(const_iterator __first, const_iterator __end)
+		{
+			return _M_t.erase(__first, __end);
+		}
 };

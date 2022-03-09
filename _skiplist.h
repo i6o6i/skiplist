@@ -67,8 +67,8 @@ struct skiplist_node_header
 
 };
 
-skiplist_node_base* _Skip_list_increment(skiplist_node_base* node) throw ();
-skiplist_node_base* _Skip_list_decrement(skiplist_node_base* node) throw ();
+skiplist_node_base* _Skip_list_increment(const skiplist_node_base* node) throw ();
+skiplist_node_base* _Skip_list_decrement(const skiplist_node_base* node) throw ();
 template<typename T>
 struct _Skip_list_iterator
 {
@@ -129,13 +129,13 @@ struct _Skip_list_const_iterator
 	typedef skiplist_node_base::_Const_Base_ptr _Base_ptr;
 
 	typedef std::bidirectional_iterator_tag iterator_category;
-	_Base_ptr* m_node;
+	_Base_ptr m_node;
 
 	_Skip_list_const_iterator() = default;
 	explicit _Skip_list_const_iterator(_Base_ptr* node) noexcept :m_node(node)  {}
 	_Skip_list_const_iterator(const iterator& __it)noexcept:m_node(__it.m_node) {}
 	iterator _M_const_cast() const noexcept
-	{ return iterator(const_cast<typename iterator::_) }
+	{ return iterator(const_cast<typename iterator::_Base_ptr>(m_node)); }
 	reference operator*()
 	{ return *static_cast<skiplist_node<T>*>(m_node)->val_ptr(); }
 	pointer operator->()
@@ -170,12 +170,13 @@ struct _Skip_list_const_iterator
 	friend bool operator!=(const _Self& lhs, const _Self& rhs) noexcept
 	{ return lhs.m_node!=rhs.m_node; }
 };
+
 void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw();
 void _Skip_list_erase(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
-		skiplist_node_header& __header) throw ()
+		skiplist_node_header& __header) throw ();
 
 template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc = std::allocator<_Val>>
 class _skip_list 
@@ -193,30 +194,17 @@ class _skip_list
 	typedef _Alloc allocator_type;
 
 	struct _select_key {
-		skip_list& _M_list;
+		_skip_list& _M_list;
 		_Val at(const _Key& k);
 		_Val operator[](const _Key& k);
 		size_type rank(const _Key& k);
 	};
 	struct _select_rank {
-		skip_list& _M_list;
-		_Val at(const size_type& r)
-		{
-
-		}
-		_Val operator[](const size_type& r)
-		{
-
-		}
-		size_type count(const size_type& r)
-		{
-			//primitive impl
-
-		}
-		_Key key(const size_type& r)
-		{
-
-		}
+		_skip_list& _M_list;
+		_Val at(const size_type& r);
+		_Val operator[](const size_type& r);
+		size_type count(const size_type& r);
+		_Key key(const size_type& r);
 	};
 	protected:
 	map_type _M_map;
@@ -368,7 +356,7 @@ class _skip_list
 	iterator
 	_M_insert_(_Base_ptr node_info, _Arg&& val, _Node_gen node_gen);
 
-	iterator erase(const_iterator __pos);
+	iterator erase(const_iterator __pos)
 	{
 		const_iterator __res = __pos;
 		++__res;
@@ -376,7 +364,7 @@ class _skip_list
 		return __res._M_const_cast();
 	}
 	//LWG 2059
-	iterator erase(iterator __pos);
+	iterator erase(iterator __pos)
 	{
 		iterator __res = __pos;
 		++__res;
@@ -384,8 +372,21 @@ class _skip_list
 		return __res;
 	}
 
+	iterator 
+    erase(const_iterator __first, const_iterator __last)
+    {
+		_M_erase_aux(__first, __last);
+		return __last._M_const_cast();
+    }
+
+	void clear()
+	{
+		_M_erase_from(_M_begin());
+		_M_impl.reset();
+	}
+
 	private:
-		void _M_erase_aux(const_iterator __pos)
+		void _M_erase_aux(const_iterator __pos);
 		void _M_erase_aux(const_iterator __first, const_iterator __last);
 		
 };
@@ -410,7 +411,7 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_insert_unique(_Arg&& a
 		return _Res(_M_insert_(&node_info,std::forward<_Arg>(arg), alloc),true);
 	}else
 	{
-		return _Res(iterator(res),false);
+		return _Res(iterator(res.first),false);
 	}
 
 }
@@ -437,7 +438,7 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_get_unique_pos(_Base_p
 		node_info->level[i-1].forward = node;
 	}
 
-	if(node==end||_M_impl._M_compare(val,*static_cast<_Link_type>(node->level[0].forward)->val_ptr()))
+	if(node->level[0].forward==end||_M_impl._M_compare(val,*static_cast<_Link_type>(node->level[0].forward)->val_ptr()))
 	{
 		return Res(nullptr,node_info);
 	}else
@@ -469,11 +470,11 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterat
 	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__pos.m_node));
 
 	skiplist_node_base node_info = skiplist_node_base();
-	auto res=_M_get_unique_pos(&node_info, *__pos);
+	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
 	if(res.first)
 	{
 		_M_map.erase(_S_key(__y));
-		_Skip_list_erase(__y, node_info, _M_impl);
+		_Skip_list_erase(__y, &node_info, _M_impl);
 		_M_drop_node(__y);
 		--_M_impl.count;
 	}
@@ -484,4 +485,22 @@ void
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterator __first, const_iterator __last)
 {
 
+	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
+	_Link_type __end = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
+
+	skiplist_node_base node_info = skiplist_node_base();
+	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
+	if(res.first)
+	{
+		while(__y!=__end)
+		{
+			_M_map.erase(_S_key(__y));
+			_Skip_list_erase(__y, &node_info, _M_impl);
+
+			_Base_ptr next = __y->level[0].forward;
+			_M_drop_node(__y);
+			__y = next;
+			--_M_impl.count;
+		}
+	}
 }

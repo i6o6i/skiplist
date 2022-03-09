@@ -12,13 +12,13 @@ static level_size randomlevel()
 	return (level<skiplist_node_base::SKIPLIST_MAXLEVEL) ? level : skiplist_node_base::SKIPLIST_MAXLEVEL;
 }
 
-skiplist_node_base* _Skip_list_increment(skiplist_node_base* node) throw ()
+skiplist_node_base* _Skip_list_increment(const skiplist_node_base* node) throw ()
 {
 	//std::cout<<(void*)node->level[0].forward;
 	return node->level[0].forward;
 }
 
-skiplist_node_base* _Skip_list_decrement(skiplist_node_base* node) throw ()
+skiplist_node_base* _Skip_list_decrement(const skiplist_node_base* node) throw ()
 {
 	return node->backward;
 }
@@ -83,8 +83,15 @@ void _Skip_list_erase(skiplist_node_base* __x,
 		}
 	}
 
-	if(__x->level[0].forward != __header._M_header)
+	if(__header._M_header.backward == __x)
+	{
+		__header._M_header.backward = __x->level[0].forward;
+	}
+	if(__x->level[0].forward != &__header._M_header)
 	{
 		__x->level[0].forward->backward = __x->backward;
 	}
+	while(__header.level_cnt > 1 && __header._M_header.level[0].forward==&__header._M_header)
+		__header.level_cnt--;
 }
+

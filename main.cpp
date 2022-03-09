@@ -1,5 +1,9 @@
 #include "skiplist.h"
 #include <iostream>
+#include <vector>
+#include <utility>
+#include <algorithm>
+#include <string>
 
 template<typename pair>
 struct KeyOfValue
@@ -27,24 +31,57 @@ struct Com
 	}
 };
 
+void test_case(const std::string& str, bool cond)
+{
+	if(cond)
+		std::cout<<"test case: "<<str<<" success\n";
+	else
+		std::cout<<"test case: "<<str<<" failed\n";
+}
 int main()
 {
 	using kov = KeyOfValue<std::pair<int,int>>;
 	//using sov = ScoreOfValue<std::pair<int,int>>;
 	using com = Com<std::pair<int,int>>;
 	typedef skip_list<int,int> skiplist;
+	std::vector<std::pair<int,int>> insert_data = {
+		{4,4},
+		{2,2},
+		{1,1},
+		{3,3}
+	};
 	skiplist list;
-	list.insert(std::pair<int,int>(4,4));
-	list.insert(std::pair<int,int>(2,2));
-	list.insert(std::pair<int,int>(1,1));
-	list.insert(std::pair<int,int>(3,3));
-	std::cout<<(void *)(list.begin().m_node);
-	auto res = list.insert(std::pair<int,int>(3,5));
-	std::cout<<"insert res:"<<res.second<<"\n";
-	res = list.insert(std::pair<int,int>(5,3));
-	std::cout<<"insert res:"<<res.second<<"\n";
-	for(skiplist::iterator iter = list.begin();iter!=list.end();iter++)
+	//insert test
+	for(size_t i=0;i<insert_data.size();i++)
 	{
-		std::cout<<iter->first<<iter->second<<std::endl;
+		list.insert(insert_data[i]);
 	}
+
+	std::sort(insert_data.begin(),insert_data.end(),[](const std::pair<int,int>& p1,const std::pair<int,int>& p2){
+		return p1.second < p2.second;
+	});
+	skiplist::iterator list_iter = list.begin();
+	auto test_case_iter = insert_data.begin();
+	for(;list_iter!=list.end()&&test_case_iter!=insert_data.end();list_iter++,test_case_iter++)
+	{
+		std::string case_name="insert test: ("+std::to_string(test_case_iter->first)+","+std::to_string(test_case_iter->second)+")";
+		test_case(case_name,
+				  list_iter->first==test_case_iter->first
+				  &&list_iter->second == test_case_iter->second
+				  );
+	}
+	test_case("insert intergration test:", list_iter==list.end()&&test_case_iter==insert_data.end());
+
+	auto res = list.insert(std::pair<int,int>(3,5));
+	test_case("dup key insert test:", res.second == false);
+	res = list.insert(std::pair<int,int>(5,3));
+	test_case("dup value insert test:", res.second == false);
+	//erase test
+	skiplist::iterator iter = list.begin();
+	while(iter!=list.end())
+	{
+		iter = list.erase(iter);
+	}
+
+	test_case("erase all test",list.begin()==list.end());
 }
