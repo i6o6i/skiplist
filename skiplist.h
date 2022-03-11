@@ -54,6 +54,7 @@ class skip_list
 		typedef _Skip_list_const_iterator<value_type> const_iterator;
 
 		typedef _skip_list<_Key, value_type, _select1st<value_type>, value_compare, _Pair_alloc_type> skip_list_type;
+		typedef size_t size_type;
 	protected:
 		skip_list_type _M_t;
 	public:
@@ -74,13 +75,19 @@ class skip_list
 
 		iterator
 		erase(const_iterator iter)
-		{
-			return _M_t.erase(iter);
-		}
+		{ return _M_t.erase(iter); }
 
 		iterator
 		erase(const_iterator __first, const_iterator __end)
-		{
-			return _M_t.erase(__first, __end);
-		}
+		{ return _M_t.erase(__first, __end); }
+
+		void clear() noexcept
+		{ _M_t.clear(); }
+
+		size_type
+		size() const noexcept
+		{ return _M_t.size(); }
+
+		bool empty() const noexcept
+		{ return _M_t.empty(); }
 };

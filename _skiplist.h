@@ -67,6 +67,9 @@ struct skiplist_node_header
 		level_cnt = 1;
 	}
 
+	skiplist_node_base* end() const noexcept
+	{ return &_M_header; }
+
 };
 
 skiplist_node_base* _Skip_list_increment(const skiplist_node_base* node) throw ();
@@ -134,10 +137,12 @@ struct _Skip_list_const_iterator
 	_Base_ptr m_node;
 
 	_Skip_list_const_iterator() = default;
-	explicit _Skip_list_const_iterator(_Base_ptr* node) noexcept :m_node(node)  {}
+	_Skip_list_const_iterator(_Base_ptr node) noexcept :m_node(node)  {}
 	_Skip_list_const_iterator(const iterator& __it)noexcept:m_node(__it.m_node) {}
+
 	iterator _M_const_cast() const noexcept
 	{ return iterator(const_cast<typename iterator::_Base_ptr>(m_node)); }
+
 	reference operator*()
 	{ return *static_cast<skiplist_node<T>*>(m_node)->val_ptr(); }
 	pointer operator->()
@@ -258,11 +263,11 @@ class _skip_list
 
 	_Base_ptr
 	_M_end() noexcept
-	{ return &this->_M_impl._M_header;  }
+	{ return &this->_M_impl.end();  }
 
 	_Const_Base_ptr
 	_M_end() const noexcept
-	{ return &this->_M_impl._M_header;  }
+	{ return &this->_M_impl.end();  }
 	static const _Key& 
 	_S_key(_Const_Link_type __x)
 	{
@@ -291,6 +296,9 @@ class _skip_list
 	public:
 	//_skip_list() : _M_impl(), _M_map(), key(_M_impl), rank(_M_impl) {}
 	  _skip_list()  = default;
+	  ~_skip_list() noexcept
+	  { _M_erase_aux(_M_begin(),_M_end()); }
+
       _Node_allocator&
       _M_get_Node_allocator() noexcept
       { return this->_M_impl; }
@@ -390,15 +398,26 @@ class _skip_list
 		return __last._M_const_cast();
     }
 
-	void clear()
+	void
+	clear() noexcept
 	{
-		_M_erase_from(_M_begin());
+		_M_erase_aux(_M_begin(),_M_end());
 		_M_impl.reset();
 	}
 
+	size_type
+	size() const noexcept
+	{
+		return _M_map.size();
+	}
+	bool empty() const noexcept
+	{
+		return _M_map.empty();
+	}
+
 	private:
-		void _M_erase_aux(const_iterator __pos);
-		void _M_erase_aux(const_iterator __first, const_iterator __last);
+		void _M_erase_aux(const_iterator __pos) ;
+		void _M_erase_aux(const_iterator __first, const_iterator __last) ;
 		
 };
 
@@ -451,12 +470,6 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_get_unique_pos(_Base_p
 
 	if(node->level[0].forward==end||_M_impl._M_compare(val,*static_cast<_Link_type>(node->level[0].forward)->val_ptr()))
 	{
-		/*
-		for(skiplist_node_base::level_size i=_M_impl.level_cnt;i>0;i--)
-		{
-			node_info->level[i-1].span = node_info->level[0].span - node_info->level[i-1].span;
-		}
-		*/
 		return Res(nullptr,node_info);
 	}else
 	{
@@ -477,7 +490,7 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_insert_(_Base_ptr node
 	_M_map.insert(typename map_type::value_type(_S_key(__z),iter));
 	
 	//dup value count
-	_M_impl.count++;
+	//_M_impl.count++;
 	return iter;
 }
 
@@ -491,7 +504,7 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterat
 	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
 	if(res.first)
 	{
-		_M_map.erase(_S_key(__y));
+		_M_map.erase(_M_map.find(_S_key(__y)));
 		_Skip_list_erase(__y, &node_info, _M_impl);
 		_M_drop_node(__y);
 		--_M_impl.count;
@@ -511,12 +524,12 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterat
 	{
 		while(__y!=__end)
 		{
-			_M_map.erase(_S_key(__y));
+			_M_map.erase(_M_map.find(_S_key(__y)));
 			_Skip_list_erase(__y, &node_info, _M_impl);
 
 			_Base_ptr next = __y->level[0].forward;
 			_M_drop_node(__y);
-			__y = next;
+			__y = static_cast<_Link_type>(next);
 			--_M_impl.count;
 		}
 	}

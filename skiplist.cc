@@ -23,6 +23,71 @@ skiplist_node_base* _Skip_list_decrement(const skiplist_node_base* node) throw (
 	return node->backward;
 }
 
+template<bool IsJuxtaposed>
+static void _Skip_list_insert_and_fix_internal(const skiplist_node_header& header, skiplist_node_base* __x,
+											   skiplist_node_base* node_info);
+
+template<>
+static void _Skip_list_insert_and_fix_internal<true>(const skiplist_node_header& header, skiplist_node_base* __x,
+												 skiplist_node_base* __x,
+											   skiplist_node_base* node_info)
+{
+	bool IsForwardDups[skiplist_node_base::SKIPLIST_MAXLEVEL];
+	for(skiplist_node_base::level_size i=0;i<level;++i)
+	{
+		skiplist_node_base* backward = node_info->level[i].forward;
+		IsForwardDups[i] = 
+			!(backward->level[i].forward!=header.end()&&
+			  !static_cast<_Link_type>(backward->level[i].forward)->)
+	}
+	bool IsBackwardDup = node_info->level[i].forward && ==;
+	for(level_size i=0;i<level;i++)
+	{
+		skiplist_node_base* backward_node = node_info->level[i].forward;
+		__x->level[i].forward = backward_node->level[i].forward;
+		backward_node->level[i].forward = __x; 
+		skiplist_node_base::span_type dif = node_info->level[0].span - node_info->level[i].span;
+		__x->level[i].span = IsForwardDups[i]?0:backward_node->level[i].span-dif - (IsForwardDups[0]?1:0);
+		backward_node->level[i].span = dif+ (IsBackwardDup? 0:1);
+	}
+
+
+	for(level_size i=level; i< __header.level_cnt; i++)
+	{
+		if(!(IsBackwardDup||IsForwardDups[0]))
+			node_info->level[i].forward->level[i].span++;
+	}
+
+	if(!(IsBackwardDup||IsForwardDups[0]))
+		_M_impl.count++;
+
+}
+
+template<>
+static void _Skip_list_insert_and_fix_internal<false>(const skiplist_node_header& header, skiplist_node_base* __x,
+												 skiplist_node_base* __x,
+											   skiplist_node_base* node_info)
+{
+
+	for(level_size i=0;i<level;i++)
+	{
+		skiplist_node_base* backward_node = node_info->level[i].forward;
+		__x->level[i].forward = backward_node->level[i].forward;
+		backward_node->level[i].forward = __x; 
+		skiplist_node_base::span_type dif = node_info->level[0].span - node_info->level[i].span;
+		__x->level[i].span = backward_node->level[i].span-dif;
+		backward_node->level[i].span = dif+ 1;
+	}
+
+	for(level_size i=level; i< __header.level_cnt; i++)
+	{
+		node_info->level[i].forward->level[i].span++;
+	}
+
+	_M_impl.count++;
+}
+
+template<bool IsJuxtaposed>
 void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw ()
@@ -40,21 +105,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		__header.level_cnt = level;
 	}
 
-	for(level_size i=0;i<level;i++)
-	{
-		skiplist_node_base* backward_node = node_info->level[i].forward;
-		__x->level[i].forward = backward_node->level[i].forward;
-		//std::cout<<(void*)__x->level[i].forward<<" ";
-		backward_node->level[i].forward = __x; 
-		skiplist_node_base::span_type dif = node_info->level[0].span - node_info->level[i].span;
-		__x->level[i].span = backward_node->level[i].span-dif;
-		backward_node->level[i].span = dif+ 1;
-	}
-
-	for(level_size i=level; i< __header.level_cnt; i++)
-	{
-		node_info->level[i].forward->level[i].span++;
-	}
+	_Skip_list_insert_and_fix_internal<IsJuxtaposed>(__x,node_info);
 
 	__x->backward = node_info->level[0].forward;
 	if(__x->level[0].forward)
@@ -63,11 +114,25 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 	}
 	if(__x->backward == &__header._M_header)
 		__header._M_header.backward = __x;
-	//__header.count++;
 	
-	//std::cout<<"inserted "<<(void*)__x<<" level "<<level<<std::endl;
 }
 
+void _Skip_list_erase(skiplist_node_base* __x,
+		skiplist_node_base* node_info, 
+		skiplist_node_header& __header) throw ()
+{
+		if(backward_node->level[i].forward == __x)
+		{
+			if(!( forwarddup ||backwarddup))
+				backward_node->level[i].span += __x->level[i].span - 1;
+			backward_node->level[i].forward = __x->level[i].forward;
+		}else
+		{
+			if(!( forwarddup ||backwarddup))
+				backward_node->level[i].span -= 1;
+		}
+
+}
 void _Skip_list_erase(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw ()

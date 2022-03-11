@@ -70,11 +70,14 @@ int main()
 	}
 	//erase test
 	skiplist::iterator iter = list.begin();
+	test_case("test size ",list.size()== insert_data.size());
 	while(iter!=list.end())
 	{
 		iter = list.erase(iter);
 	}
 
+	test_case("test size ",list.size() == 0);
+	test_case("test empty ",list.empty() == true);
 	test_case("erase all test",list.begin()==list.end());
 
 }
