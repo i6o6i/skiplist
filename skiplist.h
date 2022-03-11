@@ -14,13 +14,27 @@ struct _select1st
 	}
 };
 
+template<typename P>
+struct _select2nd
+{
+	typename P::second_type& operator()(P& pair) const noexcept 
+	{
+		return pair.second;
+	}
+
+	const typename P::second_type& operator()(const P& pair) const noexcept
+	{
+		return pair.second;
+	}
+};
+
 template<typename Pair>
 struct _compare2nd
 {
 	//typedef std::pair<_Key, _Val> value_type;
 	bool operator()(const Pair& lhs, const Pair& rhs)
 	{
-		return lhs.second < rhs.second;
+		return lhs.second < rhs.second || (lhs.second == rhs.second && lhs.first < rhs.first);
 	}
 };
 
@@ -43,6 +57,9 @@ class skip_list
 	protected:
 		skip_list_type _M_t;
 	public:
+		typename skip_list_type::_select_key<mapped_type,_select2nd<value_type>> key;
+		typename skip_list_type::_select_rank rank;
+		skip_list() :_M_t(), key(_M_t), rank(_M_t) {}
 		std::pair<iterator, bool>
 		insert(const value_type& __x)
 		{ return _M_t._M_insert_unique(__x); }

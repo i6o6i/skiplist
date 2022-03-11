@@ -34,8 +34,8 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		for(level_size i=__header.level_cnt;i<level;i++)
 		{
 			__header._M_header.level[i].forward = &__header._M_header;
+			__header._M_header.level[i].span = __header.count;
 			node_info->level[i].forward = &__header._M_header;
-			node_info->level[i].span = 0;
 		}
 		__header.level_cnt = level;
 	}
@@ -46,8 +46,9 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		__x->level[i].forward = backward_node->level[i].forward;
 		//std::cout<<(void*)__x->level[i].forward<<" ";
 		backward_node->level[i].forward = __x; 
-		__x->level[i].span = backward_node->level[i].span+node_info->level[i].span;
-		backward_node->level[i].span = node_info->level[i].span + 1;
+		skiplist_node_base::span_type dif = node_info->level[0].span - node_info->level[i].span;
+		__x->level[i].span = backward_node->level[i].span-dif;
+		backward_node->level[i].span = dif+ 1;
 	}
 
 	for(level_size i=level; i< __header.level_cnt; i++)
@@ -62,6 +63,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 	}
 	if(__x->backward == &__header._M_header)
 		__header._M_header.backward = __x;
+	//__header.count++;
 	
 	//std::cout<<"inserted "<<(void*)__x<<" level "<<level<<std::endl;
 }
@@ -93,5 +95,24 @@ void _Skip_list_erase(skiplist_node_base* __x,
 	}
 	while(__header.level_cnt > 1 && __header._M_header.level[0].forward==&__header._M_header)
 		__header.level_cnt--;
+}
+
+skiplist_node_base* _Skip_list_get_rank(skiplist_node_header& header, skiplist_node_header::size_type rank)
+{
+	skiplist_node_header::size_type span_sum =0;
+	skiplist_node_base* node = &header._M_header;
+	//skiplist_node_base* end = header._M_header;
+	for(skiplist_node_base::level_size i= header.level_cnt;i>0&&span_sum<rank;i--)
+	{
+		//assum end is header._M_header
+		while(node->level[i-1].forward!=&header._M_header&& span_sum + node->level[i-1].span <= rank)
+		{
+			span_sum += node->level[i-1].span;
+			node =node->level[i-1].forward;
+		}
+		if(span_sum == rank)
+			return node;
+	}
+	return nullptr;
 }
 

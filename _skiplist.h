@@ -3,6 +3,7 @@
 #include <iterator>
 #include <map>
 #include <cstddef>
+#include <stdexcept>
 
 template<typename T>
 struct storage
@@ -17,6 +18,7 @@ struct storage
 
 struct skiplist_node_base {
 	typedef int level_size;
+	//sum of span_type should be less than 2<<sizeof(size_t) -1 see _M_get_unique_pos
 	typedef size_t span_type ;
 	typedef skiplist_node_base* _Base_ptr;
 	typedef const skiplist_node_base* _Const_Base_ptr;
@@ -61,7 +63,7 @@ struct skiplist_node_header
 	{
 		_M_header.level[0].forward = &_M_header;
 		_M_header.backward = &_M_header;
-		count = 1;
+		count = 0;
 		level_cnt = 1;
 	}
 
@@ -177,6 +179,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 void _Skip_list_erase(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw ();
+skiplist_node_base* _Skip_list_get_rank(skiplist_node_header& header, skiplist_node_header::size_type rank);
 
 template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc = std::allocator<_Val>>
 class _skip_list 
@@ -185,7 +188,7 @@ class _skip_list
       typedef std::allocator_traits<_Node_allocator> _Alloc_traits;
 	public:
 
-	typedef size_t size_type;
+	typedef typename skiplist_node_header::size_type size_type;
 	typedef _Key key_type;
 	typedef _Val value_type;
 	typedef _Skip_list_iterator<_Val> iterator;
@@ -193,24 +196,7 @@ class _skip_list
 	typedef std::map<_Key,iterator> map_type;
 	typedef _Alloc allocator_type;
 
-	struct _select_key {
-		_skip_list& _M_list;
-		_Val at(const _Key& k);
-		_Val operator[](const _Key& k);
-		size_type rank(const _Key& k);
-	};
-	struct _select_rank {
-		_skip_list& _M_list;
-		_Val at(const size_type& r);
-		_Val operator[](const size_type& r);
-		size_type count(const size_type& r);
-		_Key key(const size_type& r);
-	};
 	protected:
-	map_type _M_map;
-	/*
-	*/
-	//template<typename _Compare>
 	struct _Skip_list_impl
 		: public _Node_allocator
 		  ,public skiplist_node_header
@@ -219,7 +205,33 @@ class _skip_list
 		typedef size_t size_type;
 		_Skip_list_impl() = default;
 	};
+	public:
+	template<typename _Up_Val, typename _ValOf>
+	struct _select_key {
+		typedef _ValOf _Up_ValOf;
+		_skip_list& _M_list;
+		_select_key(_skip_list& list) noexcept:_M_list(list) { }
+		_Up_Val& at(const _Key& k);
+		const _Up_Val& at(const _Key& k) const;
+		iterator find(const _Key& k);
+		const_iterator find(const _Key& k) const;
+		//_Up_Val operator[](const _Key& k);
+		size_type rankofkey(const _Key& k) const;
+	};
+	struct _select_rank {
+		_skip_list& _M_list;
+		_select_rank(_skip_list& list) noexcept:_M_list(list) { }
+		_Val& at(size_type n);
+		const _Val& at(size_type n) const;
+		iterator find(size_type n);
+		const_iterator find(size_type n) const;
+		//_Val operator[](const size_type& r);
+		size_type count(size_type r);
+		_Key keyofrank(size_type n);
+	};
+	protected:
 	_Skip_list_impl _M_impl;
+	map_type _M_map;
 	protected:
 	typedef skiplist_node_base* _Base_ptr;
 	typedef const skiplist_node_base* _Const_Base_ptr;
@@ -277,9 +289,8 @@ class _skip_list
 	end() noexcept
 	{ return iterator(_M_end()); }
 	public:
-	//struct _select_key select_key;
-	//struct _select_rank select_rank;
-	_skip_list() = default;
+	//_skip_list() : _M_impl(), _M_map(), key(_M_impl), rank(_M_impl) {}
+	  _skip_list()  = default;
       _Node_allocator&
       _M_get_Node_allocator() noexcept
       { return this->_M_impl; }
@@ -440,6 +451,12 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_get_unique_pos(_Base_p
 
 	if(node->level[0].forward==end||_M_impl._M_compare(val,*static_cast<_Link_type>(node->level[0].forward)->val_ptr()))
 	{
+		/*
+		for(skiplist_node_base::level_size i=_M_impl.level_cnt;i>0;i--)
+		{
+			node_info->level[i-1].span = node_info->level[0].span - node_info->level[i-1].span;
+		}
+		*/
 		return Res(nullptr,node_info);
 	}else
 	{
@@ -459,6 +476,7 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_insert_(_Base_ptr node
 
 	_M_map.insert(typename map_type::value_type(_S_key(__z),iter));
 	
+	//dup value count
 	_M_impl.count++;
 	return iter;
 }
@@ -484,7 +502,6 @@ template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, 
 void
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterator __first, const_iterator __last)
 {
-
 	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
 	_Link_type __end = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
 
@@ -502,5 +519,111 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_erase_aux(const_iterat
 			__y = next;
 			--_M_impl.count;
 		}
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+_Up_Val& _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_key<_Up_Val,_ValOf>::at(const _Key& __k)
+{
+	return _Up_ValOf()(*_M_list._M_map.at(__k));
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+const _Up_Val& _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_key<_Up_Val,_ValOf>::at(const _Key& __k) const
+{
+	const_iterator iter =_M_list._M_map.at(__k);
+	return _Up_ValOf()(*iter);
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_key<_Up_Val,_ValOf>::find(const _Key& __k)
+{
+	auto iter = _M_list._M_map.find(__k);
+	if(iter==_M_list._M_map.end())
+		return _M_list.end();
+	else return iter->second;
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::const_iterator _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_key<_Up_Val,_ValOf>::find(const _Key& __k) const
+{
+	auto iter = _M_list._M_map.find(__k);
+	if(iter==_M_list._M_map.end())
+		return const_iterator(end());
+	else return const_iterator(iter->second);
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+skiplist_node_header::size_type _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
+{
+	skiplist_node_base node_info= skiplist_node_base();
+	auto iter = _M_list._M_map.find(__k);
+	if(iter!=_M_list._M_map.end())
+	{
+		_M_list._M_get_unique_pos(&node_info,*iter->second);
+		return node_info.level[0].span +1;
+	}else
+	{
+		throw std::out_of_range("key not found");
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+_Val& _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::at(size_type n)
+{
+	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_impl,n);
+	if(!node) throw std::out_of_range("_skip_list rank out of range");
+	else return *static_cast<_Link_type>(node)->val_ptr();
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+const _Val& _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::at(size_type n) const
+{
+	skiplist_node_base* node = _Skip_list_get_rank(const_cast<skiplist_node_header&>(_M_list._M_header),n);
+	if(!node) throw std::out_of_range("_skip_list rank out of range");
+	else {
+		_Link_type link_node = static_cast<_Link_type>(node);
+		return link_node->val_ptr();
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+skiplist_node_header::size_type _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::count(size_type n)
+{
+	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_header,n);
+	if(!node) return 0;
+	else return 1;
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::find(size_type n)
+{
+	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_impl,n);
+	//must consist with _skip_list.end()
+	if(!node) return _M_list.end();
+	else return iterator(node);
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::const_iterator _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::find(size_type n) const
+{
+	skiplist_node_base* node = _Skip_list_get_rank(const_cast<skiplist_node_header&>(_M_list._M_header),n);
+	if(!node) return _M_list.end();
+	else return iterator(node);
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, typename _Alloc>
+_Key _skip_list<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_select_rank::keyofrank(size_type n)
+{
+	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_impl,n);
+	if(!node) throw std::out_of_range("_skip_list rank out of range");
+	else {
+		_Link_type link_node = static_cast<_Link_type>(node);
+		return _KeyOfValue()(*link_node->val_ptr());
 	}
 }
