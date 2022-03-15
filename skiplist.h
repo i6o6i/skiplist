@@ -34,7 +34,7 @@ struct _compare2nd
 	//typedef std::pair<_Key, _Val> value_type;
 	bool operator()(const Pair& lhs, const Pair& rhs)
 	{
-		return lhs.second < rhs.second || (lhs.second == rhs.second && lhs.first < rhs.first);
+		return lhs.second < rhs.second ;
 	}
 };
 
