@@ -32,13 +32,13 @@ template<typename Pair>
 struct _compare2nd
 {
 	//typedef std::pair<_Key, _Val> value_type;
-	bool operator()(const Pair& lhs, const Pair& rhs)
+	bool operator()(const Pair& lhs, const Pair& rhs) const
 	{
 		return lhs.second < rhs.second ;
 	}
 };
 
-template<typename _Key, typename _Tp, typename _Compare=_compare2nd<std::pair<_Key,_Tp>>, 
+template<typename _Key, typename _Tp, bool IsJuxtaposed=false, typename _Compare=_compare2nd<std::pair<_Key,_Tp>>, 
 typename _Alloc = std::allocator<std::pair<const _Key, _Tp>> >
 class skip_list 
 {
@@ -48,17 +48,17 @@ class skip_list
 		typedef std::pair<const _Key, _Tp> value_type;
 		typedef _Compare value_compare;
 		typedef _Alloc allocator_type;
-		typedef typename std::allocator_traits<allocator_type>::rebind_alloc<value_type> _Pair_alloc_type;
+		typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<value_type> _Pair_alloc_type;
 		
 		typedef _Skip_list_iterator<value_type> iterator;
 		typedef _Skip_list_const_iterator<value_type> const_iterator;
 
-		typedef _skip_list<_Key, value_type, _select1st<value_type>, value_compare, _Pair_alloc_type> skip_list_type;
+		typedef _skip_list<_Key, value_type, _select1st<value_type>, value_compare, IsJuxtaposed, _Pair_alloc_type> skip_list_type;
 		typedef size_t size_type;
 	protected:
 		skip_list_type _M_t;
 	public:
-		typename skip_list_type::_select_key<mapped_type,_select2nd<value_type>> key;
+		typename skip_list_type::template _select_key<mapped_type,_select2nd<value_type>> key;
 		typename skip_list_type::_select_rank rank;
 		skip_list() :_M_t(), key(_M_t), rank(_M_t) {}
 		std::pair<iterator, bool>

@@ -57,7 +57,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		node_info->level[i].forward->level[i].span++;
 	}
 
-	_M_impl.count++;
+	__header.count++;
 
 	__x->backward = node_info->level[0].forward;
 	if(__x->level[0].forward)
@@ -86,14 +86,6 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		__header.level_cnt = level;
 	}
 
-	//link to new node
-	for(skiplist_node_base::level_size i=0;i<level;++i)
-	{
-		skiplist_node_base* backward = node_info->level[i].forward;
-		IsForwardDups[i] = 
-			!(backward->level[i].forward!=header.end()&&
-			  !static_cast<_Link_type>(backward->level[i].forward)->)
-	}
 	for(level_size i=0;i<level;i++)
 	{
 		skiplist_node_base* backward_node = node_info->level[i].forward;
@@ -112,7 +104,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 	}
 
 	if(!IsDup)
-		_M_impl.count++;
+		__header.count++;
 
 	__x->backward = node_info->level[0].forward;
 	if(__x->level[0].forward)
@@ -128,6 +120,9 @@ void _Skip_list_erase(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header, bool IsDup) throw ()
 {
+	for(level_size i=0;i< __header.level_cnt;i++)
+	{
+		skiplist_node_base* backward_node = node_info->level[i].forward;
 		if(backward_node->level[i].forward == __x)
 		{
 			if(!IsDup)
@@ -138,6 +133,18 @@ void _Skip_list_erase(skiplist_node_base* __x,
 			if(!IsDup)
 				backward_node->level[i].span -= 1;
 		}
+	}
+
+	if(__header._M_header.backward == __x)
+	{
+		__header._M_header.backward = __x->level[0].forward;
+	}
+	if(__x->level[0].forward != &__header._M_header)
+	{
+		__x->level[0].forward->backward = __x->backward;
+	}
+	if(__header._M_header.level[0].forward==&__header._M_header)
+		__header.level_cnt = 1;
 }
 
 void _Skip_list_erase(skiplist_node_base* __x,

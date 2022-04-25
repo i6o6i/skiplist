@@ -10,7 +10,8 @@
 template<typename T>
 struct storage
 {
-	alignas(T) std::byte data[sizeof(T)];
+	typename std::aligned_storage<sizeof(T), alignof(T)>::type data;
+	//alignas(T) std::byte data[sizeof(T)];
 
 	const T* addr() const noexcept
 	{ return reinterpret_cast<const T*>(&data); }
@@ -70,6 +71,9 @@ struct skiplist_node_header
 	}
 
 	const skiplist_node_base* end() const noexcept
+	{ return &_M_header; }
+
+	skiplist_node_base* end() noexcept
 	{ return &_M_header; }
 
 };
@@ -183,15 +187,21 @@ struct _Skip_list_const_iterator
 void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw();
+void _Skip_list_insert_and_fix(skiplist_node_base* __x,
+		skiplist_node_base* node_info, 
+		skiplist_node_header& __header, bool *IsForwardDups, bool IsBackwardDup) throw ();
 void _Skip_list_erase(skiplist_node_base* __x,
 		skiplist_node_base* node_info, 
 		skiplist_node_header& __header) throw ();
+void _Skip_list_erase(skiplist_node_base* __x,
+		skiplist_node_base* node_info, 
+		skiplist_node_header& __header, bool IsDup) throw ();
 skiplist_node_base* _Skip_list_get_rank(skiplist_node_header& header, skiplist_node_header::size_type rank) throw();
 
-template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, bool IsJuxtapposed = false, typename _Alloc = std::allocator<_Val>>
+template<typename _Key, typename _Val, typename _KeyOfValue, typename _Compare, bool IsJuxtaposed, typename _Alloc = std::allocator<_Val>>
 class _skip_list 
 {
-	typedef typename std::allocator_traits<_Alloc>::rebind_alloc<skiplist_node<_Val>> _Node_allocator;
+	typedef typename std::allocator_traits<_Alloc>::template rebind_alloc<skiplist_node<_Val>> _Node_allocator;
       typedef std::allocator_traits<_Node_allocator> _Alloc_traits;
 	public:
 
@@ -213,7 +223,7 @@ class _skip_list
 		{
 			bool operator()(const value_type& lhs, const value_type& rhs) const
 			{
-				return _Compare(lhs,rhs) || (!_Compare(rhs,lhs) && std::memcmp(&lhs,&rhs,sizeof(value_type)) > 0);
+				return _Compare()(lhs,rhs) || (!_Compare()(rhs,lhs) && std::memcmp(&lhs,&rhs,sizeof(value_type)) < 0);
 			}
 		};
 	   _Val_Compare	_M_strict_compare;
@@ -232,7 +242,15 @@ class _skip_list
 		iterator find(const _Key& k);
 		const_iterator find(const _Key& k) const;
 		//_Up_Val operator[](const _Key& k);
-		size_type rankofkey(const _Key& k) const;
+		//
+		//template<typename std::enable_if<IsJuxtaposed,bool>::type abool = true>
+		//bool
+		template<bool _IsJuxtaposed=IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed,size_type>::type 
+		rankofkey(const _Key& k) const;
+
+		template<bool _IsJuxtaposed=IsJuxtaposed>
+		typename std::enable_if<!_IsJuxtaposed,size_type>::type rankofkey(const _Key& k) const;
 	};
 	struct _select_rank {
 		_skip_list& _M_list;
@@ -244,6 +262,9 @@ class _skip_list
 		//_Val operator[](const size_type& r);
 		size_type count(size_type r);
 		_Key keyofrank(size_type n);
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed,std::pair<iterator, iterator>>::type
+		equal_range(size_type n);
 	};
 	protected:
 	_Skip_list_impl _M_impl;
@@ -274,11 +295,11 @@ class _skip_list
 
 	_Base_ptr
 	_M_end() noexcept
-	{ return &this->_M_impl.end();  }
+	{ return _M_impl.end();  }
 
 	_Const_Base_ptr
 	_M_end() const noexcept
-	{ return &this->_M_impl.end();  }
+	{ return _M_impl.end();  }
 	static const _Key& 
 	_S_key(_Const_Link_type __x)
 	{
@@ -307,8 +328,6 @@ class _skip_list
 	public:
 	//_skip_list() : _M_impl(), _M_map(), key(_M_impl), rank(_M_impl) {}
 	  _skip_list()  = default;
-	  ~_skip_list() noexcept
-	  { _M_erase_aux(_M_begin(),_M_end()); }
 
       _Node_allocator&
       _M_get_Node_allocator() noexcept
@@ -382,10 +401,6 @@ class _skip_list
 	std::pair<_Base_ptr, _Base_ptr>
 	_M_get_unique_pos(_Base_ptr node_info, const value_type& key);
 
-	template<typename _Arg, typename _Node_gen>
-	iterator
-	_M_insert_(_Base_ptr node_info, _Arg&& val, _Node_gen node_gen);
-
 	iterator erase(const_iterator __pos)
 	{
 		const_iterator __res = __pos;
@@ -427,8 +442,56 @@ class _skip_list
 	}
 
 	private:
-		void _M_erase_aux(const_iterator __pos) ;
-		void _M_erase_aux(const_iterator __first, const_iterator __last) ;
+	/*
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		struct hepler {
+			_Skip_list_impl& _M_impl;
+			hepler(_Skip_list_impl& _impl) { _M_impl = _impl; }
+			template <typename std::enable_if<IsJuxtaposed>::type>
+			bool IsForwardDup(skiplist_node_base* node,skiplist_node_base::level_size level);
+			template <typename std::enable_if<IsJuxtaposed>::type>
+			bool IsBackwardDup(skiplist_node_base* node);
+			template<typename _Arg, typename _Node_gen>
+			typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator _M_insert_(_Base_ptr node_info, _Arg&& val, _Node_gen node_gen);
+			void _M_erase_aux(const_iterator __pos) ;
+			void _M_erase_aux(const_iterator __first, const_iterator __last) ;
+		};
+		struct hepler<IsJuxtaposed> _M_helper;
+		*/
+
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed,bool>::type IsForwardDup(skiplist_node_base* node, skiplist_node_base::level_size level);
+		
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed,bool>::type IsBackwardDup(skiplist_node_base* node);
+
+		template<typename _Arg, typename _Node_gen, bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed, iterator>::type
+		_M_insert_(_Base_ptr node_info, _Arg&& val, _Node_gen node_gen);
+
+		template<typename _Arg, typename _Node_gen, bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<!_IsJuxtaposed, iterator>::type
+		_M_insert_(_Base_ptr node_info, _Arg&& val, _Node_gen node_gen);
+
+
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed>::type
+		_M_erase_aux(const_iterator __pos) ;
+
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<!_IsJuxtaposed>::type
+		_M_erase_aux(const_iterator __pos) ;
+
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<_IsJuxtaposed>::type
+		_M_erase_aux(const_iterator __first, const_iterator __last) ;
+
+		template<bool _IsJuxtaposed = IsJuxtaposed>
+		typename std::enable_if<!_IsJuxtaposed>::type
+		_M_erase_aux(const_iterator __first, const_iterator __last) ;
+	public:
+	  ~_skip_list() noexcept
+	  { _M_erase_aux(_M_begin(),_M_end()); }
 		
 };
 
@@ -489,8 +552,8 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_get_uniq
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-template<typename _Arg, typename _Node_gen>
-typename std::enable_if<IsJuxtaposed==false, typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator>::type
+template<typename _Arg, typename _Node_gen, bool _IsJuxtaposed>
+typename std::enable_if<!_IsJuxtaposed, typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator>::type
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_insert_(_Base_ptr node_info, _Arg&& val,  _Node_gen node_gen)
 {
 	_Link_type __z = node_gen(std::forward<_Arg>(val));
@@ -504,24 +567,29 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_insert_(
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-template<typename _Arg, typename _Node_gen>
-typename std::enable_if<IsJuxtaposed, typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator>::type
+template<typename _Arg, typename _Node_gen, bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed, typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator>::type
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_insert_(_Base_ptr node_info, _Arg&& val,  _Node_gen node_gen)
 {
 	_Link_type __z = node_gen(std::forward<_Arg>(val));
 
 	bool IsForwardDups[skiplist_node_base::SKIPLIST_MAXLEVEL];
-	for(skiplist_node_base::level_size i=0;i<level;++i)
+	skiplist_node_base *backward, *forward;
+	for(skiplist_node_base::level_size i=_M_impl.level_cnt;i>0;--i)
 	{
-		skiplist_node_base* backward = node_info->level[i].forward;
-		const value_type& forward_val = *static_cast<_Link_type>(backward->level[i].forward)->val_ptr();
-		IsForwardDups[i] = backward->level[i].forward!=header.end()&&
+		backward = node_info->level[i-1].forward;
+		forward = backward->level[i-1].forward;
+
+		const value_type& forward_val = *static_cast<_Link_type>(forward)->val_ptr();
+		IsForwardDups[i-1] = forward!=_M_impl.end()&&
 					!_M_impl._M_compare(forward_val,val)&& !_M_impl._M_compare(val,forward_val);
 	}
-	bool IsBackwardDup = node_info->level[0].forward != _M_end()&& 
-					!_M_impl._M_compare(forward_val,val)&& !_M_impl._M_compare(val,forward_val);
+	const value_type& backward_val = *static_cast<_Link_type>(backward)->val_ptr();
+	bool IsBackwardDup = backward != _M_end()&& 
+					!_M_impl._M_compare(backward_val,val)&& !_M_impl._M_compare(val,backward_val);
 	
 	_Skip_list_insert_and_fix(__z,node_info, _M_impl, IsForwardDups, IsBackwardDup);
+
 	iterator iter(__z);
 
 	_M_map.insert(typename map_type::value_type(_S_key(__z),iter));
@@ -530,34 +598,41 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_insert_(
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-typename std::enable_if<IsJuxtaposed==false>::type
-_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_aux(const_iterator __pos)
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed,bool>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::IsForwardDup(skiplist_node_base* node, skiplist_node_base::level_size level)
 {
-	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__pos.m_node));
-
-	skiplist_node_base node_info = skiplist_node_base();
-	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
-	if(res.first)
+	bool IsForwardDup =false;
+	if(node->level[level].forward!=_M_impl.end())
 	{
-		bool IsForwardDup =false;
-		skiplist_node_base* backward = node_info->level[i].forward;
-		if(backward->level[0].forward!=header.end())
-		{
-			const value_type& forward_val = *static_cast<_Link_type>(backward->level[i].forward)->val_ptr();
-			bool IsForwardDup = !_M_impl._M_compare(forward_val,val)&& !_M_impl._M_compare(val,forward_val);
-		}
-		bool IsBackwardDup = node_info->level[0].forward != _M_end()&& 
-						!_M_impl._M_compare(forward_val,val)&& !_M_impl._M_compare(val,forward_val);
-		bool IsDup = IsForwardDup || IsBackwardDup;
-		_M_map.erase(_M_map.find(_S_key(__y)));
-		_Skip_list_erase(__y, &node_info, _M_impl,IsDup);
-		_M_drop_node(__y);
-		--_M_impl.count;
+		const value_type& forward_val = *static_cast<_Link_type>(node->level[level].forward)->val_ptr();
+		const value_type& val = *static_cast<_Link_type>(node)->val_ptr();
+		IsForwardDup = !_M_impl._M_compare(forward_val,val)&& !_M_impl._M_compare(val,forward_val);
 	}
+	return IsForwardDup;
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-typename std::enable_if<IsJuxtaposed>::type
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed,bool>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::IsBackwardDup(skiplist_node_base* node)
+{
+	bool IsBackwardDup =false;
+	if(node->backward!=_M_header())
+	{
+		const value_type& backward_val = *static_cast<_Link_type>(node->backward)->val_ptr();
+		const value_type& val = *static_cast<_Link_type>(node)->val_ptr();
+		IsBackwardDup = !_M_impl._M_compare(backward_val,val)&& !_M_impl._M_compare(val,backward_val);
+	}
+	return IsBackwardDup;
+
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
+template<bool _IsJuxtaposed>
+typename std::enable_if<!_IsJuxtaposed>::type
+//template<typename std::enable_if<!IsJuxtaposed>::type>
+//void
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_aux(const_iterator __pos)
 {
 	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__pos.m_node));
@@ -574,7 +649,57 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_au
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-void
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed>::type
+//template<typename std::enable_if<IsJuxtaposed>::type>
+//void
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_aux(const_iterator __pos)
+{
+	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__pos.m_node));
+
+	skiplist_node_base node_info = skiplist_node_base();
+	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
+	if(res.first)
+	{
+		skiplist_node_base* backward = node_info.level[0].forward;
+		_M_map.erase(_M_map.find(_S_key(__y)));
+		bool bIsDup = IsForwardDup(backward,0) || IsBackwardDup(backward);
+		_Skip_list_erase(__y, &node_info, _M_impl,bIsDup);
+		_M_drop_node(__y);
+		--_M_impl.count;
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_aux(const_iterator __first, const_iterator __last)
+{
+	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
+	_Link_type __end = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
+
+	skiplist_node_base node_info = skiplist_node_base();
+	auto res=_M_get_unique_pos(&node_info, *__y->val_ptr());
+	if(res.first)
+	{
+		skiplist_node_base* backward = node_info.level[0].forward;
+		while(__y!=__end)
+		{
+			_M_map.erase(_M_map.find(_S_key(__y)));
+			bool bIsDup = IsForwardDup(backward,0) || IsBackwardDup(backward);
+			_Skip_list_erase(__y, &node_info, _M_impl, bIsDup);
+
+			_Base_ptr next = __y->level[0].forward;
+			_M_drop_node(__y);
+			__y = static_cast<_Link_type>(next);
+			--_M_impl.count;
+		}
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
+template<bool _IsJuxtaposed>
+typename std::enable_if<!_IsJuxtaposed>::type
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_M_erase_aux(const_iterator __first, const_iterator __last)
 {
 	_Link_type __y = static_cast<_Link_type>(const_cast<_Base_ptr>(__first.m_node));
@@ -628,13 +753,15 @@ typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::co
 {
 	auto iter = _M_list._M_map.find(__k);
 	if(iter==_M_list._M_map.end())
-		return const_iterator(end());
+		return const_iterator(_M_list._M_end());
 	else return const_iterator(iter->second);
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
 template<typename _Up_Val, typename _ValOf>
-skiplist_node_header::size_type _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
+template<bool _IsJuxtaposed>
+typename std::enable_if<!_IsJuxtaposed,skiplist_node_header::size_type>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
 {
 	skiplist_node_base node_info= skiplist_node_base();
 	auto iter = _M_list._M_map.find(__k);
@@ -642,6 +769,25 @@ skiplist_node_header::size_type _skip_list<_Key, _Val, _KeyOfValue, _Compare, Is
 	{
 		_M_list._M_get_unique_pos(&node_info,*iter->second);
 		return node_info.level[0].span +1;
+	}else
+	{
+		throw std::out_of_range("key not found");
+	}
+}
+
+template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
+template<typename _Up_Val, typename _ValOf>
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed,skiplist_node_header::size_type>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
+{
+	skiplist_node_base node_info= skiplist_node_base();
+	auto iter = _M_list._M_map.find(__k);
+	if(iter!=_M_list._M_map.end())
+	{
+		_M_list._M_get_unique_pos(&node_info,*iter->second);
+		skiplist_node_base* backward = node_info.level[0].forward;
+		return node_info.level[0].span +(_M_list.IsForwardDup(backward,0)?0:1);
 	}else
 	{
 		throw std::out_of_range("key not found");
@@ -701,4 +847,20 @@ _Key _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_selec
 		_Link_type link_node = static_cast<_Link_type>(node);
 		return _KeyOfValue()(*link_node->val_ptr());
 	}
+}
+template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
+template<bool _IsJuxtaposed>
+typename std::enable_if<_IsJuxtaposed,
+						std::pair<
+						typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator,
+						typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::iterator
+						>
+	>::type
+_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_rank::equal_range(size_type n)
+{
+	skiplist_node_base* first_node = _Skip_list_get_rank(_M_list._M_impl,n);
+	skiplist_node_base* last_node = _Skip_list_get_rank(_M_list._M_impl,n+1);
+	if(!last_node) return std::make_pair(iterator(first_node),_M_list.end());
+	else return std::make_pair(iterator(first_node), iterator(last_node));
+
 }
