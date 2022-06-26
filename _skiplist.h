@@ -768,7 +768,8 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key
 	if(iter!=_M_list._M_map.end())
 	{
 		_M_list._M_get_unique_pos(&node_info,*iter->second);
-		return node_info.level[0].span +1;
+		return node_info.level[0].span +
+			node_info.level[0].forward->level[0].span;
 	}else
 	{
 		throw std::out_of_range("key not found");
@@ -787,7 +788,9 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key
 	{
 		_M_list._M_get_unique_pos(&node_info,*iter->second);
 		skiplist_node_base* backward = node_info.level[0].forward;
-		return node_info.level[0].span +(_M_list.IsForwardDup(backward,0)?0:1);
+		return node_info.level[0].span +
+			node_info.level[0].forward->level[0].span;
+		//return node_info.level[0].span +(_M_list.IsForwardDup(backward,0)?0:1);
 	}else
 	{
 		throw std::out_of_range("key not found");
@@ -798,7 +801,7 @@ template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, b
 _Val& _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_rank::at(size_type n)
 {
 	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_impl,n);
-	if(!node) throw std::out_of_range("_skip_list rank out of range");
+	if(node==_M_list._M_impl.end()) throw std::out_of_range("_skip_list rank out of range");
 	else return *static_cast<_Link_type>(node)->val_ptr();
 }
 
@@ -826,16 +829,15 @@ typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::it
 {
 	skiplist_node_base* node = _Skip_list_get_rank(_M_list._M_impl,n);
 	//must consist with _skip_list.end()
-	if(!node) return _M_list.end();
-	else return iterator(node);
+	//if(!node) return _M_list.end();
+	return iterator(node);
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
 typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::const_iterator _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_rank::find(size_type n) const
 {
 	skiplist_node_base* node = _Skip_list_get_rank(const_cast<skiplist_node_header&>(_M_list._M_header),n);
-	if(!node) return _M_list.end();
-	else return iterator(node);
+	return iterator(node);
 }
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>

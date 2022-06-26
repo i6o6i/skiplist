@@ -60,7 +60,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 	__header.count++;
 
 	__x->backward = node_info->level[0].forward;
-	if(__x->level[0].forward)
+	if(__x->level[0].forward != __header.end())
 	{
 		__x->level[0].forward->backward = __x;
 	}
@@ -92,7 +92,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		__x->level[i].forward = backward_node->level[i].forward;
 		backward_node->level[i].forward = __x; 
 		skiplist_node_base::span_type dif = node_info->level[0].span - node_info->level[i].span;
-		__x->level[i].span = IsForwardDups[i]?0:backward_node->level[i].span-dif - (IsForwardDups[0]?1:0);
+		__x->level[i].span = IsForwardDups[i]?0:backward_node->level[i].span-dif - (!IsBackwardDup&&IsForwardDups[0]?1:0);
 		backward_node->level[i].span = dif+ (IsBackwardDup? 0:1);
 	}
 
@@ -107,7 +107,7 @@ void _Skip_list_insert_and_fix(skiplist_node_base* __x,
 		__header.count++;
 
 	__x->backward = node_info->level[0].forward;
-	if(__x->level[0].forward)
+	if(__x->level[0].forward != __header.end())
 	{
 		__x->level[0].forward->backward = __x;
 	}
@@ -181,17 +181,16 @@ skiplist_node_base* _Skip_list_get_rank(skiplist_node_header& header, skiplist_n
 	skiplist_node_header::size_type span_sum =0;
 	skiplist_node_base* node = &header._M_header;
 	//skiplist_node_base* end = header._M_header;
-	for(skiplist_node_base::level_size i= header.level_cnt;i>0&&span_sum<rank;i--)
+	skiplist_node_header::size_type rank_1 = rank -1;
+	for(skiplist_node_base::level_size i= header.level_cnt;i>0&&span_sum<=rank_1;i--)
 	{
 		//assum end is header._M_header
-		while(node->level[i-1].forward!=&header._M_header&& span_sum + node->level[i-1].span <= rank)
+		while(node->level[i-1].forward!=header.end()&& span_sum + node->level[i-1].span <= rank_1)
 		{
 			span_sum += node->level[i-1].span;
 			node =node->level[i-1].forward;
 		}
-		if(span_sum == rank)
-			return node;
 	}
-	return nullptr;
+	return node->level[0].forward;
 }
 
