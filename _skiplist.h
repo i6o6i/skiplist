@@ -245,12 +245,8 @@ class _skip_list
 		//
 		//template<typename std::enable_if<IsJuxtaposed,bool>::type abool = true>
 		//bool
-		template<bool _IsJuxtaposed=IsJuxtaposed>
-		typename std::enable_if<_IsJuxtaposed,size_type>::type 
-		rankofkey(const _Key& k) const;
+		size_type rankofkey(const _Key& k) const;
 
-		template<bool _IsJuxtaposed=IsJuxtaposed>
-		typename std::enable_if<!_IsJuxtaposed,size_type>::type rankofkey(const _Key& k) const;
 	};
 	struct _select_rank {
 		_skip_list& _M_list;
@@ -759,8 +755,7 @@ typename _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::co
 
 template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
 template<typename _Up_Val, typename _ValOf>
-template<bool _IsJuxtaposed>
-typename std::enable_if<!_IsJuxtaposed,skiplist_node_header::size_type>::type
+skiplist_node_header::size_type
 _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
 {
 	skiplist_node_base node_info= skiplist_node_base();
@@ -770,27 +765,6 @@ _skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key
 		_M_list._M_get_unique_pos(&node_info,*iter->second);
 		return node_info.level[0].span +
 			node_info.level[0].forward->level[0].span;
-	}else
-	{
-		throw std::out_of_range("key not found");
-	}
-}
-
-template<typename _Key, typename _Val, typename _KeyOfValue,typename _Compare, bool IsJuxtaposed, typename _Alloc>
-template<typename _Up_Val, typename _ValOf>
-template<bool _IsJuxtaposed>
-typename std::enable_if<_IsJuxtaposed,skiplist_node_header::size_type>::type
-_skip_list<_Key, _Val, _KeyOfValue, _Compare, IsJuxtaposed, _Alloc>::_select_key<_Up_Val, _ValOf>::rankofkey(const _Key& __k) const
-{
-	skiplist_node_base node_info= skiplist_node_base();
-	auto iter = _M_list._M_map.find(__k);
-	if(iter!=_M_list._M_map.end())
-	{
-		_M_list._M_get_unique_pos(&node_info,*iter->second);
-		skiplist_node_base* backward = node_info.level[0].forward;
-		return node_info.level[0].span +
-			node_info.level[0].forward->level[0].span;
-		//return node_info.level[0].span +(_M_list.IsForwardDup(backward,0)?0:1);
 	}else
 	{
 		throw std::out_of_range("key not found");
